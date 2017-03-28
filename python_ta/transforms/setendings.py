@@ -451,7 +451,7 @@ def end_setter_from_source(source_code, pred):
                 node.end_col_offset = j + 1
                 return
 
-        # If that doesn't work, search remaining lines
+        # If that doesn't work, search all remaining lines.
         for i in range(lineno + 1, len(source_code)):
             # Search each character
             for j in range(len(source_code[i])):
