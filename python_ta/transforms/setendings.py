@@ -249,6 +249,7 @@ def init_register_ending_setters(source_code):
     ending_transformer.register_transform(astroid.BinOp, fix_binop)
     ending_transformer.register_transform(astroid.BinOp, end_setter_from_source_match_token(source_code, _token_search(')'), '(', ')'))
     ending_transformer.register_transform(astroid.Slice, fix_slice(source_code))
+    # ending_transformer.register_transform(astroid.Tuple, start_setter_from_source_match_token(source_code, _token_search('('), '(', ')'))
 
     for node_class in NODES_WITHOUT_CHILDREN:
         ending_transformer.register_transform(node_class, set_without_children)
@@ -622,8 +623,7 @@ def start_setter_from_source(source_code, pred):
         start_col, start_line = node.col_offset, node.fromlineno - 1
 
         # First, search the remaining part of the current end line.
-        # Not including first char of node source.
-        for j in range(start_col-1, -1, -1):
+        for j in range(start_col, -1, -1):
             if pred(source_code[start_line], j, node):
                 node.col_offset = j
                 return
@@ -664,7 +664,7 @@ def start_setter_from_source_match_token(source_code, pred, token_left, token_ri
         for j in range(start_col-1, -1, -1):
             chars_before_node += source_code[start_line][j]
             if pred(source_code[start_line], j, node):
-                # print('FOUND', source_code[start_line][j:start_col], j)
+                print('FOUND', source_code[start_line][j:start_col], j)
                 node.col_offset = j
                 if match_tokens_from_string(chars_before_node, token_left, token_right, original_parens):
                     return
@@ -675,7 +675,7 @@ def start_setter_from_source_match_token(source_code, pred, token_left, token_ri
             for j in range(len(source_code[i]) - 1, -1, -1):
                 chars_before_node += source_code[i][j]
                 if pred(source_code[i], j, node):
-                    # print('FOUND', source_code[i][j:len(source_code[i])])
+                    print('FOUND', source_code[i][j:len(source_code[i])])
                     node.end_col_offset, node.end_lineno = j, i + 1
                     if match_tokens_from_string(chars_before_node, token_left, token_right, original_parens):
                         return
