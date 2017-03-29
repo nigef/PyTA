@@ -339,7 +339,7 @@ class TestEndingLocation(unittest.TestCase):
     #     self.set_and_check(module, astroid.Expr, expected)
 
     def test_extslice(self):
-        """
+        """Should this have the same behavior (no include brackets) as Slice?
         """
         expected = [(1, 1, 1, 8), (2, 2, 2, 14), (3, 3, 1, 8), (4, 4, 2, 15), (5, 6, 1, 8)]
         module = self.get_file_as_module(PATH + 'ExtSlice.py')

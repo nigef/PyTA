@@ -75,7 +75,7 @@ NODES_WITH_CHILDREN = [
     astroid.Decorators,
     astroid.Delete,
     astroid.ExceptHandler,
-    astroid.ExtSlice,
+    # astroid.ExtSlice,
     # astroid.Expr,  # need this here?
     astroid.For,
     astroid.FunctionDef,
@@ -116,6 +116,10 @@ def _token_search(token):
         @type node: Astroid node
         @rtype: bool
         """
+
+        # if isinstance(node, astroid.Expr) and hasattr(node, 'end_col_offset'):
+        #     print("{}, s[{}]=={}, {}".format(node.end_col_offset, index, s[index], s))
+
         return s[index] == token
     return _is_token
 
@@ -198,6 +202,7 @@ NODES_REQUIRING_SOURCE = [
 
     # FIXME: sometimes start/ending char does not exist.
     (astroid.Expr, _token_search('('), _token_search(')')),
+    # (astroid.ExtSlice, _token_search('['), _token_search(']')),
     (astroid.ExtSlice, _token_search('['), _token_search(']')),
     (astroid.GeneratorExp, _token_search('('), _token_search(')')),
     (astroid.Index, _token_search('['), _token_search(']')),
@@ -240,6 +245,7 @@ def init_register_ending_setters(source_code):
     # Ad hoc transformations
     ending_transformer.register_transform(astroid.Arguments, fix_start_attributes)
     ending_transformer.register_transform(astroid.Arguments, set_arguments)
+    ending_transformer.register_transform(astroid.BinOp, fix_binop)
     ending_transformer.register_transform(astroid.Slice, fix_slice(source_code))
     
     for node_class in NODES_WITHOUT_CHILDREN:
@@ -324,6 +330,16 @@ def fix_slice(source_code):
         node.col_offset = char_i
 
     return _find_colon
+
+
+def fix_binop(node):
+    """
+    Assertion: parent BinOp's col_offset is less than its child BinOp.
+    Otherwise, make the correction.
+    """
+    for child_node in node.get_children():
+        if isinstance(child_node, astroid.BinOp) and node.col_offset > child_node.col_offset:
+            node.col_offset = child_node.col_offset
 
 
 def fix_start_attributes(node):
@@ -421,6 +437,46 @@ def _get_last_child(node):
         for skip_to_last_child in node.get_children():
             pass  # skip to last
         return skip_to_last_child  # postcondition: node, or None.
+
+
+def end_setter_from_source_match_paren(source_code, pred):
+    """
+    Similar to end_setter_from_source, but keeps a running count of paren tokens
+    """
+    def set_endings_from_source(node):
+        if not hasattr(node, 'end_col_offset'): 
+            set_from_last_child(node)
+
+        # Initialize counters. Note: we need to offset lineno,
+        # since it's 1-indexed.
+        end_col_offset, lineno = node.end_col_offset, node.end_lineno - 1
+
+        # First, search the remaining part of the current end line.
+        for j in range(end_col_offset, len(source_code[lineno])):
+            if source_code[lineno][j] == '#': 
+                break  # skip over comment lines
+            if pred(source_code[lineno], j, node):
+                temp = node.end_col_offset
+                node.end_col_offset = j + 1
+                return
+
+        # If that doesn't work, search all remaining lines.
+        for i in range(lineno + 1, len(source_code)):
+            # Search each character
+            for j in range(len(source_code[i])):
+                if source_code[i][j] == '#': 
+                    break  # skip over comment lines
+                if pred(source_code[i], j, node):
+                    temp_c = node.end_col_offset
+                    temp_l = node.end_lineno
+                    node.end_col_offset, node.end_lineno = j + 1, i + 1
+                    return
+                # only consume inert characters.
+                elif source_code[i][j] not in CONSUMABLES: 
+                    return
+
+    return set_endings_from_source
+
 
 
 def end_setter_from_source(source_code, pred):
