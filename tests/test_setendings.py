@@ -187,15 +187,22 @@ class TestEndingLocation(unittest.TestCase):
     #     module = self.get_file_as_module(PATH + 'Await.py')
     #     self.set_and_check(module, astroid.Await, expected)
 
-    # def test_binop(self):
-    #     """note: value of col_offset = 6, is weird but we didn't set it.
-    #     first (depends on pre/postorder) binop is ((1 + 2) + 3), then (1 + 2)
-    #     TODO: add the "( (100) * (42)  )" test 
-    #     """
-    #     expected = [(1, 1, 6, 9), (1, 1, 0, 5)]
-    #     example = '''1 + 2 + 3'''
-    #     module = self.get_string_as_module(example)
-    #     self.set_and_check(module, astroid.BinOp, expected)
+    def test_binop(self):
+        """note: value of col_offset = 6, is weird but we didn't set it.
+        E.g. "1 + 2 + 3" parent BinOp is "+ 3", and child BinOp is "1 + 2".
+        Other parenthetized examples follow the "russian doll / onion" order of 
+        operations...
+        Generally, the parent Expr node location values should include any 
+        enclosing the parens, while the child BinOp should not.
+
+        Assuming we want DONT want to include whitespace in the locations, 
+        e.g. BinOp "(   1+2   )" should include the spaces.
+
+        TODO: test the commented code in 'Binop.py'
+        """
+        expected = [(1, 1, 0, 9), (1, 1, 0, 5), (2, 2, 1, 12), (2, 2, 2, 7), (3, 3, 1, 12), (3, 3, 6, 11), (4, 4, 1, 6), (5, 5, 3, 8), (6, 6, 2, 10), (7, 7, 0, 11), (8, 8, 2, 14), (9, 10, 0, 5), (9, 9, 5, 10)]
+        module = self.get_file_as_module(PATH + 'Binop.py')
+        self.set_and_check(module, astroid.BinOp, expected)
 
     # def test_boolop(self):
     #     """
