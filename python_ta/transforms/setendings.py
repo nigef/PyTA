@@ -441,22 +441,11 @@ def _get_last_child(node):
         return skip_to_last_child  # postcondition: node, or None.
 
 
-def count_tokens_from_node(source_code, node, token_left, token_right):
-    """
-    Count of the number of parens, to ensure matching parens.
-    We cannot rely on having the `end_lineno` property set.
-    Search RTL from the index -- possibly over multiple lines:
-        .... (.......... ...
-        ....... .... .......
-        .....) ........ ....
-    Some assumptions are made about matching paren count, but it should suffice.
-
-    Return a tuple of (left_paren_number, right_paren_number)
+def node_as_string(source_code, node):
+    """Return a string representation of the node, based on ending locations.
     """
     node_string = ''
-    temp_print = []
-    first_child_end_lineno = next(node.get_children()).end_lineno
-    # node.end_lineno = first_child_end_lineno
+    # temp_print = []
 
     # sometimes Expr doesnt have an end_col_offset
     if not hasattr(node, 'end_col_offset'):
@@ -469,27 +458,42 @@ def count_tokens_from_node(source_code, node, token_left, token_right):
     #     node.end_col_offset
     #     ))
 
-    # Look at each line of the node
+    # Look at each line of the node.
     # Recall these are 1-indexed: fromlineno, end_lineno
-    # for line_i in range(node.fromlineno, first_child_end_lineno+1):
     for line_i in range(node.fromlineno, node.end_lineno+1):
         # only one line
         if line_i == node.fromlineno == node.end_lineno:
             node_string = source_code[line_i-1][node.col_offset : node.end_col_offset]
-            temp_print.append(source_code[line_i-1][node.col_offset : node.end_col_offset])
+            # temp_print.append(source_code[line_i-1][node.col_offset : node.end_col_offset])
         # middle lines
         elif line_i != node.fromlineno and line_i != node.end_lineno:
             node_string += source_code[line_i-1]
-            temp_print.append(source_code[line_i-1])
+            # temp_print.append(source_code[line_i-1])
         # first line
         elif line_i == node.fromlineno:
             node_string += source_code[line_i-1][node.col_offset:]
-            temp_print.append(source_code[line_i-1][node.col_offset:])
+            # temp_print.append(source_code[line_i-1][node.col_offset:])
         # last line
         elif line_i == node.end_lineno:
             node_string += source_code[line_i-1][:node.end_col_offset]
-            temp_print.append(source_code[line_i-1][:node.end_col_offset])
-    
+            # temp_print.append(source_code[line_i-1][:node.end_col_offset])
+
+    # print(temp_print)
+    return node_string
+
+
+def count_tokens_from_node(source_code, node, token_left, token_right):
+    """
+    Count of the number of parens, to ensure matching parens.
+    We cannot rely on having the `end_lineno` property set.
+    Search RTL from the index -- possibly over multiple lines:
+        .... (.......... ...
+        ....... .... .......
+        .....) ........ ....
+    Some assumptions are made about matching paren count, but it should suffice.
+    Return a tuple of (left_paren_number, right_paren_number)
+    """
+    node_string = node_as_string(source_code, node)
     return count_tokens_from_string(node_string, token_left, token_right)
 
 
@@ -501,14 +505,14 @@ def count_tokens_from_string(string, token_left, token_right):
 
 def end_setter_from_source_match_paren(source_code, pred):
     """
-    Similar to end_setter_from_source, but keeps a running count of paren tokens
+    Similar to end_setter_from_source, but keeps a count of tokens to
+    ensure matching.
     """
     def set_endings_from_source(node):
         if not hasattr(node, 'end_col_offset'): 
             set_from_last_child(node)
 
-        # Initialize counters. Note: we need to offset lineno,
-        # since it's 1-indexed.
+        # Initialize counters. Note: lineno is 1-indexed.
         start_col, start_line = node.end_col_offset, node.end_lineno - 1
 
         original_parens = count_tokens_from_node(source_code, node, '(', ')')
@@ -524,8 +528,7 @@ def end_setter_from_source_match_paren(source_code, pred):
             else:
                 string_afterwards += source_code[start_line][j]
             if pred(source_code[start_line], j, node):
-                print('FOUND', source_code[start_line][start_col:j+1], j)
-                temp = node.end_col_offset
+                # print('FOUND', source_code[start_line][start_col:j+1], j)
                 node.end_col_offset = j + 1
                 new_parens = count_tokens_from_string(string_afterwards, '(', ')')
                 combined = tuple(map(sum, zip(original_parens, new_parens)))
@@ -542,9 +545,7 @@ def end_setter_from_source_match_paren(source_code, pred):
                 else:
                     string_afterwards += source_code[i][j]
                 if pred(source_code[i], j, node):
-                    print('FOUND', source_code[i][0:j+1])
-                    temp_c = node.end_col_offset
-                    temp_l = node.end_lineno
+                    # print('FOUND', source_code[i][0:j+1])
                     node.end_col_offset, node.end_lineno = j + 1, i + 1
                     new_parens = count_tokens_from_string(string_afterwards, '(', ')')
                     combined = tuple(map(sum, zip(original_parens, new_parens)))
@@ -572,8 +573,7 @@ def end_setter_from_source(source_code, pred):
         if not hasattr(node, 'end_col_offset'): 
             set_from_last_child(node)
 
-        # Initialize counters. Note: we need to offset lineno,
-        # since it's 1-indexed.
+        # Initialize counters. Note: lineno is 1-indexed.
         end_col_offset, lineno = node.end_col_offset, node.end_lineno - 1
 
         # First, search the remaining part of the current end line.
@@ -581,7 +581,6 @@ def end_setter_from_source(source_code, pred):
             if source_code[lineno][j] == '#': 
                 break  # skip over comment lines
             if pred(source_code[lineno], j, node):
-                temp = node.end_col_offset
                 node.end_col_offset = j + 1
                 return
 
@@ -592,8 +591,6 @@ def end_setter_from_source(source_code, pred):
                 if source_code[i][j] == '#': 
                     break  # skip over comment lines
                 if pred(source_code[i], j, node):
-                    temp_c = node.end_col_offset
-                    temp_l = node.end_lineno
                     node.end_col_offset, node.end_lineno = j + 1, i + 1
                     return
                 # only consume inert characters.
