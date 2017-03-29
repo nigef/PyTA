@@ -247,7 +247,7 @@ def init_register_ending_setters(source_code):
     ending_transformer.register_transform(astroid.Arguments, fix_start_attributes)
     ending_transformer.register_transform(astroid.Arguments, set_arguments)
     ending_transformer.register_transform(astroid.BinOp, fix_binop)
-    ending_transformer.register_transform(astroid.BinOp, end_setter_from_source_match_paren(source_code, _token_search(')')))
+    ending_transformer.register_transform(astroid.BinOp, end_setter_from_source_match_token(source_code, _token_search(')'), '(', ')'))
     ending_transformer.register_transform(astroid.Slice, fix_slice(source_code))
 
     for node_class in NODES_WITHOUT_CHILDREN:
@@ -486,7 +486,7 @@ def count_tokens_from_node(source_code, node, token_left, token_right):
     """
     Count of the number of parens, to ensure matching parens.
     We cannot rely on having the `end_lineno` property set.
-    Search RTL from the index -- possibly over multiple lines:
+    Search from the start column and line -- possibly over multiple lines:
         .... (.......... ...
         ....... .... .......
         .....) ........ ....
@@ -503,37 +503,44 @@ def count_tokens_from_string(string, token_left, token_right):
     return (string.count(token_left), string.count(token_right))
 
 
-def end_setter_from_source_match_paren(source_code, pred):
+def match_tokens_from_string(string, token_left, token_right, existing_tup=(0, 0)):
+    """Return a bool of whether the token_left, token_right match in the
+    given string.
+    Accepts an optional tuple parameter of existing counts (num_left, num_right).
+    """
+    new_parens = count_tokens_from_string(string, token_left, token_right)
+    combined = tuple(map(sum, zip(existing_tup, new_parens)))
+    return all(el == combined[0] for el in combined)
+
+
+def end_setter_from_source_match_token(source_code, pred, token_left, token_right):
     """
     Similar to end_setter_from_source, but keeps a count of tokens to
     ensure matching.
     """
-    def set_endings_from_source(node):
+    def set_endings_from_source_match_token(node):
         if not hasattr(node, 'end_col_offset'): 
             set_from_last_child(node)
 
         # Initialize counters. Note: lineno is 1-indexed.
         start_col, start_line = node.end_col_offset, node.end_lineno - 1
 
-        original_parens = count_tokens_from_node(source_code, node, '(', ')')
+        original_parens = count_tokens_from_node(source_code, node, token_left, token_right)
         if original_parens[0] == original_parens[1]:
             return
 
-        string_afterwards = ''  # append new stuff to here.
+        chars_after_node = ''  # append new stuff to here.
 
         # First, search the remaining part of the current end line.
         for j in range(start_col, len(source_code[start_line])):
             if source_code[start_line][j] == '#': 
                 break  # skip over comment lines
             else:
-                string_afterwards += source_code[start_line][j]
+                chars_after_node += source_code[start_line][j]
             if pred(source_code[start_line], j, node):
                 # print('FOUND', source_code[start_line][start_col:j+1], j)
                 node.end_col_offset = j + 1
-                new_parens = count_tokens_from_string(string_afterwards, '(', ')')
-                combined = tuple(map(sum, zip(original_parens, new_parens)))
-                print(combined)
-                if all(el == combined[0] for el in combined):
+                if match_tokens_from_string(chars_after_node, token_left, token_right, original_parens):
                     return
 
         # If that doesn't work, search all remaining lines.
@@ -543,19 +550,17 @@ def end_setter_from_source_match_paren(source_code, pred):
                 if source_code[i][j] == '#': 
                     break  # skip over comment lines
                 else:
-                    string_afterwards += source_code[i][j]
+                    chars_after_node += source_code[i][j]
                 if pred(source_code[i], j, node):
                     # print('FOUND', source_code[i][0:j+1])
                     node.end_col_offset, node.end_lineno = j + 1, i + 1
-                    new_parens = count_tokens_from_string(string_afterwards, '(', ')')
-                    combined = tuple(map(sum, zip(original_parens, new_parens)))
-                    if all(el == combined[0] for el in combined):
+                    if match_tokens_from_string(chars_after_node, token_left, token_right, original_parens):
                         return
                 # only consume inert characters.
                 elif source_code[i][j] not in CONSUMABLES: 
                     return
 
-    return set_endings_from_source
+    return set_endings_from_source_match_token
 
 
 def end_setter_from_source(source_code, pred):
@@ -574,18 +579,18 @@ def end_setter_from_source(source_code, pred):
             set_from_last_child(node)
 
         # Initialize counters. Note: lineno is 1-indexed.
-        end_col_offset, lineno = node.end_col_offset, node.end_lineno - 1
+        start_col, start_line = node.end_col_offset, node.end_lineno - 1
 
         # First, search the remaining part of the current end line.
-        for j in range(end_col_offset, len(source_code[lineno])):
-            if source_code[lineno][j] == '#': 
+        for j in range(start_col, len(source_code[start_line])):
+            if source_code[start_line][j] == '#': 
                 break  # skip over comment lines
-            if pred(source_code[lineno], j, node):
+            if pred(source_code[start_line], j, node):
                 node.end_col_offset = j + 1
                 return
 
         # If that doesn't work, search all remaining lines.
-        for i in range(lineno + 1, len(source_code)):
+        for i in range(start_line + 1, len(source_code)):
             # Search each character
             for j in range(len(source_code[i])):
                 if source_code[i][j] == '#': 
@@ -614,17 +619,17 @@ def start_setter_from_source(source_code, pred):
     """
     def set_start_from_source(node):
         # Initialize counters. Note: fromlineno is 1-indexed.
-        col_offset, lineno = node.col_offset, node.fromlineno - 1
+        start_col, start_line = node.col_offset, node.fromlineno - 1
 
-        # First, search the remaining part of the current end line
-        for j in range(col_offset, -1, -1):
-            if pred(source_code[lineno], j, node):
-                temp = node.col_offset
+        # First, search the remaining part of the current end line.
+        # Not including first char of node source.
+        for j in range(start_col-1, -1, -1):
+            if pred(source_code[start_line], j, node):
                 node.col_offset = j
                 return
 
         # If that doesn't work, search remaining lines
-        for i in range(lineno - 1, -1, -1):
+        for i in range(start_line - 1, -1, -1):
             # Search each character, right-to-left
             for j in range(len(source_code[i]) - 1, -1, -1):
                 if pred(source_code[i], j, node):
@@ -635,3 +640,47 @@ def start_setter_from_source(source_code, pred):
                     return
 
     return set_start_from_source
+
+
+def start_setter_from_source_match_token(source_code, pred, token_left, token_right):
+    """
+    Similar to start_setter_from_source, but keeps a count of tokens to
+    ensure matching.
+    """
+    def set_start_from_source_match_token(node):
+        if not hasattr(node, 'end_col_offset'): 
+            set_from_last_child(node)
+
+        # Initialize counters. Note: lineno is 1-indexed.
+        start_col, start_line = node.end_col_offset, node.end_lineno - 1
+
+        original_parens = count_tokens_from_node(source_code, node, token_left, token_right)
+        if original_parens[0] == original_parens[1]:
+            return
+
+        chars_before_node = ''  # append new stuff to here.
+
+        # First, search the remaining part of the current end line.
+        for j in range(start_col-1, -1, -1):
+            chars_before_node += source_code[start_line][j]
+            if pred(source_code[start_line], j, node):
+                # print('FOUND', source_code[start_line][j:start_col], j)
+                node.col_offset = j
+                if match_tokens_from_string(chars_before_node, token_left, token_right, original_parens):
+                    return
+
+        # If that doesn't work, search remaining lines
+        for i in range(start_line - 1, -1, -1):
+            # Search each character, right-to-left
+            for j in range(len(source_code[i]) - 1, -1, -1):
+                chars_before_node += source_code[i][j]
+                if pred(source_code[i], j, node):
+                    # print('FOUND', source_code[i][j:len(source_code[i])])
+                    node.end_col_offset, node.end_lineno = j, i + 1
+                    if match_tokens_from_string(chars_before_node, token_left, token_right, original_parens):
+                        return
+                # only consume inert characters.
+                elif source_code[i][j] not in CONSUMABLES: 
+                    return
+
+    return set_start_from_source_match_token

@@ -200,7 +200,7 @@ class TestEndingLocation(unittest.TestCase):
 
         TODO: test the commented code in 'Binop.py'
         """
-        expected = [(1, 1, 0, 9), (1, 1, 0, 5), (2, 2, 1, 12), (2, 2, 2, 7), (3, 3, 1, 12), (3, 3, 6, 11), (4, 4, 1, 6), (5, 5, 3, 8), (6, 6, 2, 10), (7, 7, 0, 11), (8, 8, 2, 14), (9, 10, 0, 5), (9, 9, 5, 10)]
+        expected = [(1, 1, 0, 9), (1, 1, 0, 5), (2, 2, 1, 12), (2, 2, 2, 7), (3, 3, 1, 12), (3, 3, 6, 11), (4, 4, 1, 6), (5, 5, 3, 8), (6, 6, 2, 10), (7, 7, 0, 11), (8, 8, 2, 14), (9, 10, 0, 5), (9, 9, 5, 10), (12, 12, 4, 15), (12, 12, 9, 14), (14, 16, 2, 5)]
         module = self.get_file_as_module(PATH + 'Binop.py')
         self.set_and_check(module, astroid.BinOp, expected)
 
@@ -338,12 +338,49 @@ class TestEndingLocation(unittest.TestCase):
     #     module = self.get_file_as_module(PATH + 'Exec.py')
     #     self.set_and_check(module, astroid.Exec, expected)
 
-    # def test_expr(self):
-    #     """TODO: test all the Expr nodes in 'Slice.py'
-    #     """
-    #     expected = [(1, 1, 0, 12), (2, 2, 0, 13), (3, 3, 0, 11), (4, 4, 0, 17)]
-    #     module = self.get_file_as_module(PATH + 'Expr.py')
-    #     self.set_and_check(module, astroid.Expr, expected)
+    def test_expr(self):
+        """TODO: test all the Expr nodes in 'Slice.py'
+
+        TODO: test other Expr, according to the ast abstract grammar:
+        https://docs.python.org/2/library/ast.html
+        
+        expr = BoolOp(boolop op, expr* values)
+            | BinOp(expr left, operator op, expr right)
+            | UnaryOp(unaryop op, expr operand)
+            | Lambda(arguments args, expr body)
+            | IfExp(expr test, expr body, expr orelse)
+            | Dict(expr* keys, expr* values)
+            | Set(expr* elts)
+            | ListComp(expr elt, comprehension* generators)
+            | SetComp(expr elt, comprehension* generators)
+            | DictComp(expr key, expr value, comprehension* generators)
+            | GeneratorExp(expr elt, comprehension* generators)
+            -- the grammar constrains where yield expressions can occur
+            | Yield(expr? value)
+            -- need sequences for compare to distinguish between
+            -- x < 4 < 3 and (x < 4) < 3
+            | Compare(expr left, cmpop* ops, expr* comparators)
+            | Call(expr func, expr* args, keyword* keywords,
+            expr? starargs, expr? kwargs)
+            | Repr(expr value)
+            | Num(object n) -- a number as a PyObject.
+            | Str(string s) -- need to specify raw, unicode, etc?
+            -- other literals? bools?
+
+            -- the following expression can appear in assignment context
+            | Attribute(expr value, identifier attr, expr_context ctx)
+            | Subscript(expr value, slice slice, expr_context ctx)
+            | Name(identifier id, expr_context ctx)
+            | List(expr* elts, expr_context ctx) 
+            | Tuple(expr* elts, expr_context ctx)
+
+            -- col_offset is the byte offset in the utf8 string the parser uses
+            attributes (int lineno, int col_offset)
+        """
+        expected = [(1, 1, 0, 12), (2, 2, 0, 13), (3, 3, 0, 11), (4, 4, 0, 17),
+            (5, 5, 0, 31), (6, 8, 0, 17), (9, 11, 0, 6) ]
+        module = self.get_file_as_module(PATH + 'Expr.py')
+        self.set_and_check(module, astroid.Expr, expected)
 
     def test_extslice(self):
         """Should this have the same behavior (no include brackets) as Slice?
@@ -578,7 +615,7 @@ class TestEndingLocation(unittest.TestCase):
     #     self.set_and_check(module, astroid.TryFinally, expected)
 
     def test_tuple(self):
-        expected = [(1, 1, 0, 6), (2, 2, 0, 11), (3, 3, 0, 5), (4, 4, 0, 7), (5, 5, 0, 1), (6, 6, 0, 6)]
+        expected = [(1, 1, 0, 6), (2, 2, 0, 11), (3, 3, 0, 5), (4, 4, 0, 7), (5, 5, 0, 1), (6, 6, 0, 6), (7, 9, 0, 17)]
         module = self.get_file_as_module(PATH + 'Tuple.py')
         self.set_and_check(module, astroid.Tuple, expected)
 
