@@ -42,6 +42,10 @@ CONSUMABLES = " \n\t\\"
 NODES_WITHOUT_CHILDREN = [
     astroid.AssignName,
     astroid.Break,
+
+    # TODO: Fix Const to make the parens count work for the rest.
+    # We do a greedy search for the parens, "print(((2)))" and capture n-1 paren
+    # pairs. 
     astroid.Const,
     astroid.Continue,
     astroid.DelName,
@@ -215,6 +219,8 @@ NODES_REQUIRING_SOURCE = [
     (astroid.SetComp, None, _token_search('}')),
     (astroid.Slice, _is_within_open_bracket, _is_within_close_bracket),
     (astroid.Subscript, None, _token_search(']')),
+
+    # TODO: needs to include the comma at the end.
     (astroid.Tuple, _token_search('('), _token_search(')'))
 ]
 
@@ -272,6 +278,11 @@ def init_register_ending_setters(source_code):
     ending_transformer.register_transform(astroid.Exec, discover_nodes)
     ending_transformer.register_transform(astroid.Print, discover_nodes)
     ending_transformer.register_transform(astroid.Repr, discover_nodes)
+
+    # TODO: register transforms for Const to search for enclosing parens.
+    # Want recursive approach -- use locations of children more.
+
+
     return ending_transformer
 
 
