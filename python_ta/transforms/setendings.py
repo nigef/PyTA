@@ -256,11 +256,14 @@ def init_register_ending_setters(source_code):
     ending_transformer.register_transform(astroid.BinOp, end_setter_from_source_match_token(source_code, _token_search(')'), '(', ')'))
     ending_transformer.register_transform(astroid.Slice, fix_slice(source_code))
     # ending_transformer.register_transform(astroid.Tuple, start_setter_from_source_match_token(source_code, _token_search('('), '(', ')'))
+    
 
     for node_class in NODES_WITHOUT_CHILDREN:
         ending_transformer.register_transform(node_class, set_without_children)
     for node_class in NODES_WITH_CHILDREN:
         ending_transformer.register_transform(node_class, set_from_last_child)
+
+    ending_transformer.register_transform(astroid.Const, fix_const(source_code))
 
     # Nodes where the source code must also be provided.
     # source_code and the predicate functions get stored in the TransformVisitor
@@ -304,6 +307,189 @@ def discover_nodes(node):
     print('\n' + message)
     logging.info(message)
 
+
+def fix_const(source_code):
+    """
+    """
+
+    def _fix_const(node):
+        """
+        "start" := top-left side of node
+        "end" := bottom-right side of node
+
+        Take turns searching outwards from the node "start" and "end" positions,
+        one pair at a time.
+        Keep searching while matches are being made with left and parenthesis 
+        (paren) tokens.
+
+        Use a 4-tuple to contain the endings, along with an additional temporary
+        4-tuple to contain new values that are either used, or discarded when
+        parent is an astroid.Call node
+
+        At each step, consume CONSUMABLE characters descending column and line 
+        numbers from the "start" col_offset, and when a '(' is encountered, its
+        position is included in the temp 4-tuple and the search is paused.
+        ...Similar for searching ascending column and line numbers from the 
+        "end", end_col_offset for ')'...
+
+        Precondition: Equal number of left and right parenthesis (paren) tokens.
+
+        Postcondition: The search ends when either sides, "start" or "end", of 
+        the search cannot reach their targeted token.
+
+        Be especially careful about the efficiency of this function because the 
+        amount of `Const` nodes is often high.
+        """
+
+        # Bools for loop condition, start vacuously true.
+        start_token_found = False
+        end_token_found = False
+        finish_search = False
+        
+        # Placeholders in source_code. Use 0-indexed values.
+        cursor_start_l = node.fromlineno - 1
+        cursor_start_c = node.col_offset - 1
+        cursor_end_l = node.end_lineno - 1
+        cursor_end_c = node.end_col_offset
+        
+        # Used and temporary location positions
+        locations_curr = (node.fromlineno, node.end_lineno, node.col_offset, 
+               node.end_col_offset)
+
+        num_matched_pairs = 0
+
+        print('\n\nLINE {}. Current line string: "{}", node: "{}"\n'.format(
+            node.fromlineno, source_code[cursor_start_l], 
+            source_code[cursor_start_l][node.col_offset:node.end_col_offset]))
+
+        # while loop conditions are used to pause and resume, rather than for 
+        # loops..
+        while not start_token_found and not end_token_found and not finish_search:
+
+            # Search side: "start", descending column and line numbers
+            while not start_token_found and not finish_search:
+
+                if cursor_start_c < 0:  # Start a new line, one line up
+                    cursor_start_l -= 1
+                    cursor_start_c = len(source_code[cursor_start_l]) - 1
+
+                if cursor_start_c < 0 and cursor_start_l < 0:
+                    finish_search = True
+                    break
+
+                if '#' in source_code[cursor_start_l]:  # skip over comments
+                    cursor_start_c = source_code[cursor_start_l].index('#') - 1
+                    if cursor_start_c < 0:
+                        continue
+
+                print('S: "'+source_code[cursor_start_l]+'"', cursor_start_c, 
+                    cursor_start_l, 'len=', len(source_code[cursor_start_l]))
+
+                # Guard against empty line: 
+                if not source_code[cursor_start_l]:
+                    cursor_start_l -= 1
+                    break
+
+                while cursor_start_c > 0 and source_code[cursor_start_l][cursor_start_c] in CONSUMABLES:
+                    cursor_start_c -= 1
+
+                # keep consuming CONSUMABLES upwards...
+                if cursor_start_c == 0 and source_code[cursor_start_l][cursor_start_c] in CONSUMABLES:
+                    cursor_start_c -= 1
+                    continue
+
+                if source_code[cursor_start_l][cursor_start_c] is not '(':
+                    print('>s>', '"'+source_code[cursor_start_l][cursor_start_c]+
+                        '"', cursor_start_c, cursor_start_l, 
+                        len(source_code[cursor_start_l]), '... Abort!!')
+                    start_token_found = False  # invalid char, do not keep searching.
+                    finish_search = True
+                    break
+                else:
+                    print('found at col{} line{}'.format(cursor_start_c, cursor_start_l))
+                    start_token_found = True
+
+            print('')
+
+            # Search side: "end", ascending column and line numbers
+            while not end_token_found and not finish_search:
+
+                if cursor_end_c == len(source_code[cursor_end_l]):
+                    cursor_end_l += 1  # Start a new line, one line down
+                    cursor_end_c = 0
+
+                # one more than last 0-indexed line num:
+                if cursor_end_l == len(source_code):
+                    finish_search = True
+                    break
+
+                print('E: "'+source_code[cursor_end_l]+'"', cursor_end_c, 
+                    cursor_end_l, 'len=', len(source_code[cursor_end_l]))
+
+                # Guard against empty line: `source_code[cursor_start_l]`
+                if not source_code[cursor_end_l]:
+                    cursor_end_l += 1
+                    break
+
+                while cursor_end_c < len(source_code[cursor_end_l]) - 1 and source_code[cursor_end_l][cursor_end_c] in CONSUMABLES:
+                    cursor_end_c += 1
+
+                if cursor_end_c == len(source_code[cursor_end_l]) - 1 and source_code[cursor_end_l][cursor_end_c] in CONSUMABLES:
+                    cursor_end_c += 1
+                    continue
+
+                if source_code[cursor_end_l][cursor_end_c] is '#':
+                    cursor_end_l += 1
+                    cursor_end_c = 0
+                    continue  # skip over comment lines
+                elif source_code[cursor_end_l][cursor_end_c] is not ')':
+                    print('>e>', '"'+source_code[cursor_end_l][cursor_end_c]+
+                        '"', cursor_end_c, cursor_end_l, 
+                        len(source_code[cursor_end_l]), '... Abort!!')
+                    end_token_found = False  # invalid char, do not keep searching.
+                    finish_search = True
+                    break
+                else:
+                    print('found at col{} line{}'.format(cursor_end_c, cursor_end_l))
+                    end_token_found = True
+
+            print(start_token_found, end_token_found, '......', finish_search)
+
+            if start_token_found and end_token_found and not finish_search:
+                num_matched_pairs += 1
+                print('locations_curr before: {}'.format(locations_curr))
+                # Recall 1-indexed values are: fromlineno, end_lineno.
+                # Recall `end_col_offset` is set to index+1 position.
+                locations_prev = locations_curr
+                locations_curr = (cursor_start_l+1, cursor_end_l+1, cursor_start_c, 
+                            cursor_end_c+1)
+                print('locations_curr after : {}'.format(locations_curr))
+                print('num_matched_pairs:', num_matched_pairs)
+                print('\n\n')
+
+                # Use n-1 paren pairs for `Const` node in `Call` node.
+                if isinstance(node.parent, astroid.Call) and num_matched_pairs > 1:
+                    node.fromlineno = locations_prev[0]
+                    node.end_lineno = locations_prev[1]
+                    node.col_offset = locations_prev[2]
+                    node.end_col_offset = locations_prev[3]
+                elif not isinstance(node.parent, astroid.Call):
+                    node.fromlineno = locations_curr[0]
+                    node.end_lineno = locations_curr[1]
+                    node.col_offset = locations_curr[2]
+                    node.end_col_offset = locations_curr[3]
+
+                # Continue searching outwards..
+                cursor_start_c -= 1
+                cursor_end_c += 1
+                # reset
+                start_token_found = False
+                end_token_found = False
+            else:
+                print('nothing set.\n\n')
+                finish_search = True
+
+    return _fix_const
 
 def fix_slice(source_code):
     """
