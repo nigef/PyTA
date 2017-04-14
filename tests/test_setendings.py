@@ -251,12 +251,33 @@ class TestEndingLocation(unittest.TestCase):
         module = self.get_file_as_module(PATH + 'Comprehension.py')
         self.set_and_check(module, astroid.Comprehension, expected)
 
-    # def test_const(self):
-    #     """
-    #     """
-    #     expected = [(1, 1, 0, 6), (2, 2, 4, 6)]
-    #     module = self.get_file_as_module(PATH + 'const.py')
-    #     self.set_and_check(module, astroid.Const, expected)
+    def test_const(self):
+        """
+        Recall: True/False is also a const.
+        """
+        expected = [
+            (1, 1, 0, 1),
+            (2, 2, 0, 6), 
+            (3, 3, 4, 6),
+            (4, 4, 6, 7),
+            (5, 5, 6, 9),
+            (6, 6, 0, 3),
+            (7, 7, 0, 5),
+            (8, 8, 1, 2), (8, 8, 4, 8),
+            (9, 9, 1, 6),
+            (10, 10, 4, 5), (10, 10, 8, 9), (10, 10, 11, 12), (10, 10, 15, 18),
+            (11, 12, 0, 4),
+            (13, 14, 0, 6),
+            (15, 16, 0, 5),
+            (17, 17, 0, 17),
+            (18, 20, 0, 1),
+            (21, 23, 0, 11),
+            (24, 24, 0, 4),
+            (25, 25, 0, 7),
+            (26, 26, 6, 11), (26, 26, 13, 25)
+        ]
+        module = self.get_file_as_module(PATH + 'const.py')
+        self.set_and_check(module, astroid.Const, expected)
 
     def test_continue(self):
         """
