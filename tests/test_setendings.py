@@ -5,7 +5,7 @@ Run from /pyta/ dir: `python tests/test_setendings.py`
 """
 
 import unittest
-from astroid.bases import NodeNG
+from astroid.node_classes import NodeNG
 from python_ta.transforms.setendings import *
 from colorama import Back, Fore
 
@@ -43,7 +43,7 @@ class NodeNG(object):
         return self._props_check
 
 
-class TestEndingLocation(unittest.TestCase):
+class TestEndingLocations(unittest.TestCase):
     """The method, ending_transformer.visit(module) walks the given astroid
     *tree* and transform each encountered node. Only the nodes which have
     transforms registered will actually be replaced or changed.
@@ -121,7 +121,7 @@ class TestEndingLocation(unittest.TestCase):
         self.set_and_check(module, astroid.Assert, expected)
 
     def test_assign(self):
-        expected = [(1, 1, 0, 5), (2, 2, 0, 9), (3, 3, 0, 11), (4, 4, 0, 8)]
+        expected = [(1, 1, 0, 5), (2, 2, 0, 9), (3, 3, 0, 11), (4, 4, 0, 8), (5, 5, 0, 6)]
         module = self.get_file_as_module(PATH + 'Assign.py')
         self.set_and_check(module, astroid.Assign, expected)
 
@@ -220,8 +220,8 @@ class TestEndingLocation(unittest.TestCase):
 
     def test_call(self):
         """Note: the end_col_offset is 1 left of the last ')'.
-        >>>print(1, 2, 3,  
-        >>>     4)
+            print(1, 2, 3,  
+                 4)
         """
         expected = [(1, 2, 0, 9)]
         module = self.get_file_as_module(PATH + 'Call.py')
@@ -254,8 +254,8 @@ class TestEndingLocation(unittest.TestCase):
     def test_const(self):
         """
         """
-        expected = [(1, 1, 0, 6), (2, 2, 4, 6)]
-        module = self.get_file_as_module(PATH + 'const.py')
+        expected = [(1, 1, 0, 6), (2, 2, 4, 6), (3, 3, 0, 3), (4, 4, 0, 8), (5, 7, 0, 1)]
+        module = self.get_file_as_module(PATH + 'Const.py')
         self.set_and_check(module, astroid.Const, expected)
 
     def test_continue(self):
@@ -297,7 +297,7 @@ class TestEndingLocation(unittest.TestCase):
 
     def test_dict(self):
         expected = [(1, 1, 6, 32), (2, 5, 4, 1), (6, 9, 4, 6)]
-        module = self.get_file_as_module(PATH + 'dict.py')
+        module = self.get_file_as_module(PATH + 'Dict.py')
         self.set_and_check(module, astroid.Dict, expected)
 
     def test_dictcomp(self):
@@ -543,14 +543,14 @@ class TestEndingLocation(unittest.TestCase):
         encountered, either on left or right side of colon.
         Should capture both brackets..
         """
-        expected = [(1, 1, 2, 3), 
-                    (2, 2, 3, 8), 
-                    (3, 3, 2, 4), 
-                    (4, 4, 3, 13), 
-                    (5, 5, 2, 8), 
-                    (6, 6, 8, 30), 
-                    (7, 8, 2, 2), 
-                    (9, 9, 2, 4), 
+        expected = [(1, 1, 2, 3),
+                    (2, 2, 3, 8),
+                    (3, 3, 2, 4),
+                    (4, 4, 3, 13),
+                    (5, 5, 2, 8),
+                    (6, 6, 8, 30),
+                    (7, 8, 2, 2),
+                    (9, 9, 2, 4),
                     (9, 9, 6, 7),
                     (10, 10, 2, 3),
                     (10, 10, 5, 7),
@@ -577,7 +577,7 @@ class TestEndingLocation(unittest.TestCase):
     def test_subscript(self):
         """
         """
-        expected = [(1, 1, 0, 4), 
+        expected = [(1, 1, 0, 4),
                     (2, 2, 0, 8),
                     (3, 3, 0, 4),
                     (4, 4, 0, 9),
